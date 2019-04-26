@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -11,8 +12,8 @@ import (
 // Info jsonに出力する週間天気情報
 type Info struct {
 	City           string   `json:"city"`
-	MaxTemperature []string `json:"maxTemp"`
-	MinTemperature []string `json:"minTemp"`
+	MaxTemperature []int    `json:"maxTemp"`
+	MinTemperature []int    `json:"minTemp"`
 	Image          []string `json:"image"`
 }
 
@@ -34,7 +35,8 @@ func main() {
 			s.Parent().Find(".maxtemp").Each(func(_ int, s *goquery.Selection) {
 				temp := strings.TrimSpace(s.Text())
 				temps := strings.Split(temp, "\n")
-				weatherInfo.MaxTemperature = append(weatherInfo.MaxTemperature, temps[0])
+				intTemp, _ := strconv.Atoi(temps[0])
+				weatherInfo.MaxTemperature = append(weatherInfo.MaxTemperature, intTemp)
 				isSetMax = true
 			})
 		}
@@ -43,7 +45,8 @@ func main() {
 			s.Parent().Find(".mintemp").Each(func(_ int, s *goquery.Selection) {
 				temp := strings.TrimSpace(s.Text())
 				temps := strings.Split(temp, "\n")
-				weatherInfo.MinTemperature = append(weatherInfo.MinTemperature, temps[0])
+				intTemp, _ := strconv.Atoi(temps[0])
+				weatherInfo.MinTemperature = append(weatherInfo.MinTemperature, intTemp)
 				isSetMin = true
 			})
 		}
