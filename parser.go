@@ -162,6 +162,15 @@ func parseTemperature(doc *goquery.Document, outInfo *Info) {
 				index++
 			})
 
+			// 6日分しか記録されていない場合というのは、今日の最低気温がない場合(気象庁のサイトの仕様)。
+			// 先頭に不正な値を入力する
+			if index == 6 {
+				for i := 6; i > 0; i-- {
+					outInfo.MinTemperature[i] = outInfo.MinTemperature[i-1]
+				}
+				outInfo.MinTemperature[0] = 99
+			}
+
 			return
 		}
 	})
