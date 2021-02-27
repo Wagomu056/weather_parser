@@ -46,7 +46,7 @@ func main() {
 
 	// Webから情報を取得
 	nowInfo := new(Info)
-	nowInfo.ImageRootPath = "https://www.jma.go.jp/jp/week/"
+    nowInfo.ImageRootPath = "https://www.jma.go.jp/bosai/forecast/"
 	parseWeb(nowInfo)
 
 	// 天気情報をマージ
@@ -105,7 +105,7 @@ func deleteBeforeDate(date int, outInfo *Info) {
 }
 
 func parseWeb(outInfo *Info) {
-	doc, err := goquery.NewDocument("https://www.jma.go.jp/jp/week/319.html")
+	doc, err := goquery.NewDocument("https://www.jma.go.jp/bosai/forecast/")
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
