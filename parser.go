@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -46,7 +45,7 @@ func main() {
 
 	// Webから情報を取得
 	nowInfo := new(Info)
-    nowInfo.ImageRootPath = "https://www.jma.go.jp/bosai/forecast/"
+    nowInfo.ImageRootPath = "https://s.yimg.jp/images/weather/general/next/size150/"
 	parseWeb(nowInfo)
 
 	// 天気情報をマージ
@@ -105,105 +104,88 @@ func deleteBeforeDate(date int, outInfo *Info) {
 }
 
 func parseWeb(outInfo *Info) {
-	doc, err := goquery.NewDocument("https://www.jma.go.jp/bosai/forecast/")
+    doc, err := goquery.NewDocument("https://weather.yahoo.co.jp/weather/jp/13/4410.html")
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
 	}
 
-	parseDate(doc, outInfo)
-
-	parseTemperature(doc, outInfo)
-
-	parseImage(doc, outInfo)
+	parseForecast(doc, outInfo)
+    parseWeek(doc, outInfo)
 }
 
-func parseDate(doc *goquery.Document, outInfo *Info) {
-	//print("parse date")
-	selection := doc.Find(".weekday")
-	if selection.Length() == 0 {
+func parseForecast(doc *goquery.Document, outInfo *Info) {
+    forecast := doc.Find("div.forecastCity > table > tbody > tr > td > div")
+	if forecast.Length() == 0 {
 		return
 	}
 
-	index := 0
-	selection.Parent().Children().Each(func(_ int, s *goquery.Selection) {
-		dateInt := trimDateAsInt(s.Text())
-		if dateInt > 0 {
-			//print(dateInt)
-			//print("\n")
-			outInfo.Date[index] = dateInt
-			index++
-		}
-	})
+    today := forecast.First()
+    parseForecastPair(today, outInfo, 0)
+
+    tomorrow := forecast.Last()
+    parseForecastPair(tomorrow, outInfo, 1)
 }
 
-func parseTemperature(doc *goquery.Document, outInfo *Info) {
-	//print("parseTemperature")
+func parseForecastPair(selection *goquery.Selection, outInfo *Info, listIdx int) {
+    // 日付
+    date := selection.Find(".date")
+    outInfo.Date[listIdx] = trimDateAsInt(date.Text())
 
-	doc.Find(".cityname").Each(func(_ int, s *goquery.Selection) {
-		if s.Text() == "東京" {
-			parent := s.Parent()
-			index := 0
-			parent.Find(".maxtemp").Each(func(_ int, s *goquery.Selection) {
-				intTemp := trimTemperatureAsInt(s.Text())
-				outInfo.MaxTemperature[index] = intTemp
-				//print(intTemp)
-				//print("\n")
-				index++
-			})
+    // 天気マーク
+    img := selection.Find(".pict > img")
+    path, _ := img.Attr("src")
+    outInfo.Image[listIdx] = trimImageFile(path)
 
-			parent = parent.Next()
-			index = 0
-			parent.Find(".mintemp").Each(func(_ int, s *goquery.Selection) {
-				intTemp := trimTemperatureAsInt(s.Text())
-				outInfo.MinTemperature[index] = intTemp
-				//print(intTemp)
-				//print("\n")
-				index++
-			})
+    // 最高気温
+    max_temp := selection.Find(".temp > .high > em")
+    outInfo.MaxTemperature[listIdx], _ = strconv.Atoi(max_temp.Text())
 
-			// 6日分しか記録されていない場合というのは、今日の最低気温がない場合(気象庁のサイトの仕様)。
-			// 先頭に不正な値を入力する
-			if index == 6 {
-				for i := 6; i > 0; i-- {
-					outInfo.MinTemperature[i] = outInfo.MinTemperature[i-1]
-				}
-				outInfo.MinTemperature[0] = 99
-			}
-
-			return
-		}
-	})
+    // 最低気温
+    min_temp := selection.Find(".temp > .low > em")
+    outInfo.MinTemperature[listIdx], _ = strconv.Atoi(min_temp.Text())
 }
 
-func parseImage(doc *goquery.Document, outInfo *Info) {
-	doc.Find(".normal").Each(func(_ int, s *goquery.Selection) {
-		if strings.Contains(s.Text(), "東京地方") {
-			index := 0
-			s.Parent().Find("img").Each(func(_ int, s *goquery.Selection) {
-				imagePath, _ := s.Attr("src")
-				outInfo.Image[index] = imagePath
-				index++
-			})
+func parseWeek(doc *goquery.Document, outInfo *Info) {
+    yjw_week := doc.Find("div#yjw_week > table.yjw_table > tbody > tr")
+    yjw_week.Each(func(rowIdx int, row *goquery.Selection) {
+        row.Find("td").Each(func(i int, s *goquery.Selection) {
+            if i >= 1 && i <= 5{
+                listIdx := i + 1;
 
-			return
-		}
-	})
+                switch(rowIdx) {
+                    // 日付
+                    case 0: {
+                        small := s.Find("small").First()
+                        outInfo.Date[listIdx] = trimDateAsInt(small.Text())
+                    }
+                    // 天気マーク
+                    case 1: {
+                        path, _ := s.Find("img").First().Attr("src")
+                        outInfo.Image[listIdx] = trimImageFile(path)
+                    }
+                    // 気温
+                    case 2: {
+                        small := s.Find("small > font")
+                        outInfo.MinTemperature[listIdx], _ = strconv.Atoi(small.First().Text())
+                        outInfo.MaxTemperature[listIdx], _ = strconv.Atoi(small.Last().Text())
+                    }
+                }
+            }
+        })
+    })
 }
-
-var rexLeadingDigits = regexp.MustCompile(`\d+`)
 
 func trimDateAsInt(dateStr string) int {
-	rex := rexLeadingDigits.Copy()
-	value, _ := strconv.Atoi(rex.FindString(dateStr))
+    dateStr = strings.Split(dateStr, "日")[0]
+    dateStr = strings.Split(dateStr, "月")[1]
+	value, _ := strconv.Atoi(dateStr)
 	return value
 }
 
-func trimTemperatureAsInt(tempStr string) int {
-	temp := strings.TrimSpace(tempStr)
-	temps := strings.Split(temp, "\n")
-	intTemp, _ := strconv.Atoi(temps[0])
-	return intTemp
+func trimImageFile(pathStr string) string {
+    splited := strings.Split(pathStr, "/")
+    return splited[len(splited) - 1]
 }
 
 func mergeInfo(srcInfo *Info, targetInfo *Info) {
